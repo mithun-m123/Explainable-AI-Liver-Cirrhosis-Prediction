@@ -83,14 +83,18 @@ desktop.ini
 # ── Docker runtime ────────────────────────────────────────────────────────────
 .docker/
 
-# ── ML Model binaries — use Git LFS for large files ──────────────────────────
-# Uncomment the lines below if you do NOT want to commit model binaries.
-# They are ~50 MB total; Git LFS is recommended for repositories on GitHub.
-#
-# backend/models/*.pkl
-# backend/models/*.h5
-# backend/models/*.pt
-# backend/models/*.pth
+# ── ML Model binaries — excluded from version control ────────────────────────
+# Large binary files (~50 MB total). Download separately — see README.
+# Metadata JSON files are still tracked (small, version-controlled).
+backend/models/*.pkl
+backend/models/*.h5
+backend/models/*.pt
+backend/models/*.pth
+!backend/models/*.json
+
+# ── Datasets — excluded from version control ─────────────────────────────────
+# Download separately — see README for sources and links.
+datasets/*.csv
 
 # ── Training artefacts ────────────────────────────────────────────────────────
 wandb/

@@ -18,6 +18,82 @@ An explainable AI-powered web application for non-invasive liver cirrhosis stagi
 
 ---
 
+## ⚠️ Required Downloads (Before Running)
+
+Model binaries and datasets are **not included in this repository** (they are large binary files excluded from version control). You must download them before running the application.
+
+### 1. Pre-trained Models (~50 MB)
+
+Place all files inside `backend/models/`:
+
+| File | Description |
+|---|---|
+| `rf_model.pkl` | Random Forest ensemble model |
+| `gb_model.pkl` | Gradient Boosting model |
+| `xgb_model.pkl` | XGBoost model |
+| `symptom_model.pkl` | Symptom-based classifier |
+| `symptom_scaler.pkl` | Feature scaler for symptom model |
+| `image_model.pkl` | Image classification model |
+| `image_rf.pkl` | Image Random Forest model |
+| `image_gb.pkl` | Image Gradient Boosting model |
+| `image_svm.pkl` | Image SVM model |
+| `image_scaler.pkl` | Image feature scaler |
+| `image_label_encoder.pkl` | Label encoder for image model |
+| `image_metadata.json` | Image model metadata *(tracked in repo)* |
+| `liver_cnn_model.h5` | CNN deep learning model |
+| `model_metadata.json` | Model metadata *(tracked in repo)* |
+
+**Option A — Download from GitHub Releases:**
+```bash
+# Go to: https://github.com/YOUR_USERNAME/liver-cirrhosis-prediction/releases
+# Download models.zip → extract to backend/models/
+```
+
+**Option B — Train your own models:**
+```bash
+cd ai_pipeline
+python train_ml.py   # trains RF, GB, XGBoost, symptom models
+python train_dl.py   # trains CNN image model
+```
+
+---
+
+### 2. Datasets (~5 MB)
+
+Place all files inside `datasets/`:
+
+| File | Description |
+|---|---|
+| `cirrhosis.csv` | Primary cirrhosis dataset (Mayo Clinic PBC) |
+| `cirrhosis_augmented.csv` | Augmented training data |
+| `dataset.csv` | Combined dataset |
+| `liver_patient_dataset.csv` | Liver patient records |
+| `merged_liver_dataset.csv` | Final merged training dataset |
+
+**Download sources:**
+- [Cirrhosis Patient Survival — Kaggle](https://www.kaggle.com/datasets/joebeachcapital/cirrhosis-patient-survival-prediction)
+- [Liver Patient Dataset — Kaggle](https://www.kaggle.com/datasets/uciml/indian-liver-patient-records)
+
+Or download from **Google Drive** *(link to be added by repo owner)*.
+
+---
+
+### Verify Setup
+
+After downloading, run:
+```bash
+python test_setup.py
+```
+
+Expected output:
+```
+✅ backend/models/ — all 14 model files found
+✅ datasets/       — all 5 dataset files found
+✅ Setup complete — ready to run
+```
+
+---
+
 ## Project Structure
 
 ```
@@ -111,13 +187,19 @@ git clone https://github.com/your-username/liver-cirrhosis-prediction.git
 cd liver-cirrhosis-prediction
 ```
 
-**2. Configure environment variables**
+**2. Download models and datasets**
+
+See the [Required Downloads](#️-required-downloads-before-running) section above.
+- Extract models → `backend/models/`
+- Extract datasets → `datasets/`
+
+**3. Configure environment variables**
 ```bash
 cp .env.example .env
 # Open .env and set JWT_SECRET_KEY and any optional API keys
 ```
 
-**3. Set up the backend**
+**4. Set up the backend**
 ```bash
 python -m venv venv
 
@@ -130,13 +212,13 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-**4. Start the backend**
+**5. Start the backend**
 ```bash
 cd backend
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-**5. Set up and start the frontend**
+**6. Set up and start the frontend**
 ```bash
 cd frontend
 npm install
