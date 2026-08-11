@@ -1,0 +1,12 @@
+main_category,sub_category_level_1,sub_category_level_2,number_of_files
+Benign,image,,200
+Benign,segmentation,liver,200
+Benign,segmentation,mass,200
+Benign,segmentation,outline,200
+Malignant,image,,435
+Malignant,segmentation,liver,432
+Malignant,segmentation,mass,435
+Malignant,segmentation,outline,435
+Normal,image,,100
+Normal,segmentation,liver,100
+Normal,segmentation,outline,100

@@ -1,0 +1,29 @@
+{
+  "classes": [
+    "Benign",
+    "Malignant",
+    "Normal"
+  ],
+  "class_to_idx": {
+    "Benign": 0,
+    "Malignant": 1,
+    "Normal": 2
+  },
+  "n_features": 742,
+  "img_size": [
+    128,
+    128
+  ],
+  "accuracy_test": 0.7687074829931972,
+  "f1_weighted": 0.7549346345569641,
+  "cv_mean": 0.7428571428571429,
+  "cv_std": 0.010884353741496561,
+  "total_images": 735,
+  "per_class": {
+    "Normal": 100,
+    "Benign": 200,
+    "Malignant": 435
+  },
+  "dataset": "7272660 (Normal/Benign/Malignant liver ultrasound)",
+  "feature_desc": "HOG + texture stats + color histogram + LBP"
+}

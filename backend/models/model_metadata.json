@@ -1,0 +1,59 @@
+{
+  "features": [
+    "Age",
+    "Sex",
+    "Ascites",
+    "Hepatomegaly",
+    "Spiders",
+    "Edema",
+    "Bilirubin",
+    "Cholesterol",
+    "Albumin",
+    "Copper",
+    "Alk_Phos",
+    "SGOT",
+    "Tryglicerides",
+    "Platelets",
+    "Prothrombin"
+  ],
+  "n_classes": 4,
+  "stage_labels": {
+    "0": "Stage 1 - Mild Fibrosis",
+    "1": "Stage 2 - Moderate Fibrosis",
+    "2": "Stage 3 - Severe Fibrosis",
+    "3": "Stage 4 - Cirrhosis"
+  },
+  "dataset": "cirrhosis_augmented.csv",
+  "total_samples": 5212,
+  "real_samples": 412,
+  "synthetic_samples": 4800,
+  "train_size": 4169,
+  "test_size": 1043,
+  "accuracy_test": 0.6586768935762224,
+  "f1_weighted": 0.6531066449411768,
+  "stage4_auc": 0.9424512261894469,
+  "cv_mean": 0.6398682009484673,
+  "cv_std": 0.009305972765612984,
+  "ensemble_weights": {
+    "xgboost": 0.4,
+    "gradboost": 0.4,
+    "random_forest": 0.2
+  },
+  "feature_importance": {
+    "Hepatomegaly": 0.27533644437789917,
+    "Bilirubin": 0.10730626434087753,
+    "Spiders": 0.06831581145524979,
+    "Cholesterol": 0.06619921326637268,
+    "Edema": 0.06080252677202225,
+    "Ascites": 0.05999176204204559,
+    "Albumin": 0.0535459965467453,
+    "Prothrombin": 0.04980051890015602,
+    "Tryglicerides": 0.046842146664857864,
+    "Copper": 0.038451600819826126,
+    "SGOT": 0.03840511664748192,
+    "Alk_Phos": 0.03572099655866623,
+    "Platelets": 0.03550887107849121,
+    "Age": 0.034697528928518295,
+    "Sex": 0.02907511778175831
+  }
+}
