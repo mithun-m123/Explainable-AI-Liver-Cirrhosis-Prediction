@@ -3,6 +3,7 @@ import {
   ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend,
   AreaChart, Area, XAxis, YAxis, CartesianGrid, BarChart, Bar
 } from 'recharts';
+import { Activity, AlertTriangle, BarChart3, CalendarDays, ClipboardList, RefreshCw, ShieldCheck } from 'lucide-react';
 import { analyticsAPI } from '../api';
 import '../styles/pages/DashboardPage.css';
 
@@ -12,6 +13,8 @@ const DashboardPage = () => {
   const [distribution, setDistribution] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [range, setRange] = useState(30);
+  const [lastUpdated, setLastUpdated] = useState(null);
 
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -20,13 +23,14 @@ const DashboardPage = () => {
         // Fetch stats, trends, and risk distribution in parallel
         const [statsData, trendsData, distData] = await Promise.all([
           analyticsAPI.getUserStats(),
-          analyticsAPI.getDiagnosisTrends(null, 30),
+          analyticsAPI.getDiagnosisTrends(null, range),
           analyticsAPI.getRiskDistribution()
         ]);
 
         setStats(statsData);
         setTrends(trendsData);
         setDistribution(distData);
+        setLastUpdated(new Date());
       } catch (err) {
         console.error('Failed to load dashboard data', err);
         setError('Error loading analytics. Make sure the backend server is running and populated.');
@@ -36,7 +40,7 @@ const DashboardPage = () => {
     };
 
     fetchDashboardData();
-  }, []);
+  }, [range]);
 
   if (loading) {
     return (
@@ -65,15 +69,23 @@ const DashboardPage = () => {
   return (
     <div className="dashboard-page">
       <div className="dashboard-header-section">
-        <h1>📈 Clinical Dashboard & Analytics</h1>
-        <p className="subtitle">Real-time surveillance and predictions of Liver Cirrhosis cases</p>
+        <div className="dashboard-heading">
+          <div className="dashboard-kicker"><span className="dashboard-pulse" /> CLINICAL INTELLIGENCE</div>
+          <h1>Good morning, <em>here is the signal.</em></h1>
+          <p className="subtitle">A focused view of screening activity, model confidence, and patients needing attention.</p>
+        </div>
+        <div className="dashboard-controls">
+          <div className="range-control" role="group" aria-label="Dashboard date range"><CalendarDays size={16} />{[7, 30, 90].map(days => <button key={days} className={range === days ? 'active' : ''} onClick={() => setRange(days)}>{days}d</button>)}</div>
+          <button className="refresh-button" onClick={() => window.location.reload()} title="Refresh dashboard"><RefreshCw size={17} /> Refresh</button>
+        </div>
+        {lastUpdated && <span className="updated-label">Updated {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>}
       </div>
 
       <div className="dashboard-container">
         {/* KPI Grid */}
         <div className="kpi-grid">
           <div className="kpi-card total-diagnoses">
-            <div className="kpi-icon">📋</div>
+            <div className="kpi-icon"><ClipboardList size={23} /></div>
             <div className="kpi-info">
               <h3>Total Diagnoses</h3>
               <div className="kpi-value">{total_diagnoses}</div>
@@ -82,7 +94,7 @@ const DashboardPage = () => {
           </div>
 
           <div className="kpi-card confidence">
-            <div className="kpi-icon">🔬</div>
+            <div className="kpi-icon"><Activity size={23} /></div>
             <div className="kpi-info">
               <h3>Avg. AI Confidence</h3>
               <div className="kpi-value">{(average_confidence * 100).toFixed(1)}%</div>
@@ -91,7 +103,7 @@ const DashboardPage = () => {
           </div>
 
           <div className="kpi-card alerts">
-            <div className="kpi-icon">🚨</div>
+            <div className="kpi-icon"><AlertTriangle size={23} /></div>
             <div className="kpi-info">
               <h3>Critical Alerts</h3>
               <div className="kpi-value">{criticalAlerts}</div>
@@ -104,8 +116,7 @@ const DashboardPage = () => {
         <div className="charts-grid">
           {/* Trend Chart */}
           <div className="chart-card trends-card">
-            <h3>📈 Screening Activity & Risk Level Trends</h3>
-            <p className="chart-description">Diagnosis count and average risk score progression (last 30 days)</p>
+            <div className="chart-heading"><div><h3><BarChart3 size={18} /> Screening activity</h3><p className="chart-description">Diagnosis count and average risk progression</p></div><span className="chart-badge">Last {range} days</span></div>
             <div className="chart-wrapper">
               <ResponsiveContainer width="100%" height={300}>
                 <AreaChart data={trends} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
@@ -134,7 +145,7 @@ const DashboardPage = () => {
 
           {/* Distribution Chart */}
           <div className="chart-card distribution-card">
-            <h3>📊 Patient Risk Class Distribution</h3>
+            <h3><ShieldCheck size={18} /> Patient risk distribution</h3>
             <p className="chart-description">Percentage breakdown of patients across liver health risk brackets</p>
             <div className="chart-wrapper">
               <ResponsiveContainer width="100%" height={300}>
@@ -161,7 +172,7 @@ const DashboardPage = () => {
 
           {/* Confidence Distribution */}
           <div className="chart-card bar-card">
-            <h3>🔬 Confidence Score Distribution by Date</h3>
+            <h3><Activity size={18} /> Confidence by date</h3>
             <p className="chart-description">Average AI classification confidence index progression</p>
             <div className="chart-wrapper">
               <ResponsiveContainer width="100%" height={300}>

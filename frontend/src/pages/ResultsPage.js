@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { ExternalLink, MapPin, Navigation, PhoneCall, Stethoscope } from 'lucide-react';
 import '../styles/pages/ResultsPage.css';
 import api from '../api';
 
@@ -39,6 +40,12 @@ const ResultsPage = ({ prediction: initialPrediction }) => {
   const [loading, setLoading] = useState(!initialPrediction);
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState('');
+  const [consultationOpen, setConsultationOpen] = useState(false);
+  const [locationStatus, setLocationStatus] = useState('idle');
+  const [locationError, setLocationError] = useState('');
+  const [location, setLocation] = useState(null);
+  const [providers, setProviders] = useState([]);
+  const [providersLoading, setProvidersLoading] = useState(false);
 
   useEffect(() => {
     if (!initialPrediction && id) {
@@ -89,6 +96,39 @@ const ResultsPage = ({ prediction: initialPrediction }) => {
   const handleNewDiagnosis = () => navigate('/diagnosis');
   const handleViewHistory = () => navigate('/results');
 
+  const findNearbyDoctors = () => {
+    setConsultationOpen(true); setLocationStatus('loading'); setLocationError('');
+    if (!navigator.geolocation) { setLocationStatus('manual'); setLocationError('Location is not available in this browser.'); return; }
+    navigator.geolocation.getCurrentPosition(({ coords }) => {
+      setLocation({ latitude: coords.latitude, longitude: coords.longitude });
+      fetchNearbyProviders(coords.latitude, coords.longitude);
+      const query = encodeURIComponent('hepatologist gastroenterologist liver specialist');
+      window.open(`https://www.google.com/maps/search/${query}/@${coords.latitude},${coords.longitude},13z`, '_blank', 'noopener,noreferrer');
+      setLocationStatus('found');
+    }, () => { setLocationStatus('manual'); setLocationError('We could not access your location. Search by city or postcode instead.'); }, { enableHighAccuracy: false, timeout: 8000 });
+  };
+
+  const fetchNearbyProviders = async (latitude, longitude) => {
+    setProvidersLoading(true);
+    try {
+      const query = `[out:json][timeout:15];(nwr[amenity~"hospital|clinic|doctors"](around:10000,${latitude},${longitude}););out center tags;`;
+      const response = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`);
+      if (!response.ok) throw new Error('Provider search failed');
+      const data = await response.json();
+      const mapped = (data.elements || []).map(provider => {
+        const tags = provider.tags || {}; const center = provider.center || provider;
+        const address = [tags['addr:housenumber'], tags['addr:street'], tags['addr:city'], tags['addr:postcode']].filter(Boolean).join(', ');
+        const name = tags.name || 'Healthcare provider';
+        return { id: provider.id, name, type: tags.amenity === 'hospital' ? 'Hospital' : tags.amenity === 'clinic' ? 'Clinic' : 'Doctors', address: address || null, phone: tags.phone || tags['contact:phone'] || null, mapUrl: `https://www.google.com/maps/search/?api=1&query=${center.lat},${center.lon}`, searchUrl: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${name} ${address}`)}` };
+      }).filter(provider => provider.name !== 'Healthcare provider' || provider.address).slice(0, 8);
+      setProviders(mapped);
+      if (!mapped.length) setLocationError('No listed providers were found within 10 km. Try searching by city or postcode.');
+    } catch (err) { setLocationError('Nearby provider details could not be loaded. You can still search by city or postcode.'); }
+    finally { setProvidersLoading(false); }
+  };
+
+  const openManualSearch = (event) => { event.preventDefault(); const area = new FormData(event.currentTarget).get('location'); if (!area?.trim()) return; window.open(`https://www.google.com/maps/search/${encodeURIComponent(`hepatologist gastroenterologist liver specialist near ${area.trim()}`)}`, '_blank', 'noopener,noreferrer'); setLocationStatus('found'); };
+
   if (loading) {
     return (
       <div className="results-loading">
@@ -134,6 +174,7 @@ const ResultsPage = ({ prediction: initialPrediction }) => {
   const riskBg = RISK_BG[riskLevel] || '#f8fafc';
   const confidence = pred.confidence || 0;
   const recommendations = pred.recommendations || [];
+  const needsConsultation = ['medium', 'high', 'critical'].includes(riskLevel) || ['stage_2', 'stage_3', 'stage_4'].includes(stage);
 
   const cirrhosisRisk = Object.entries(probabilities)
     .filter(([s]) => ['stage_2', 'stage_3', 'stage_4'].includes(s))
@@ -167,6 +208,20 @@ const ResultsPage = ({ prediction: initialPrediction }) => {
             <div className="conf-label">AI Confidence</div>
           </div>
         </div>
+
+        {needsConsultation && <div className="consultation-card consultation-priority" role="region" aria-label="Nearby doctor consultation">
+          <div className="consultation-icon"><Stethoscope size={25} /></div>
+          <div className="consultation-copy">
+            <span className="consultation-kicker">{needsConsultation ? 'Recommended next step' : 'Care directory'}</span>
+            <h2>{needsConsultation ? 'Speak with a liver specialist nearby' : 'Find a liver specialist nearby'}</h2>
+            <p>{needsConsultation ? 'Your result suggests follow-up with a hepatologist or gastroenterologist. Find local care and bring this report to your appointment.' : 'Search for a hepatologist or gastroenterologist near you. This screening result does not replace a medical consultation.'}</p>
+            {consultationOpen && locationStatus === 'manual' && <form className="location-form" onSubmit={openManualSearch}><input name="location" type="text" placeholder="City or postcode" aria-label="City or postcode" /><button type="submit" className="location-submit"><ExternalLink size={16} /> Search area</button></form>}
+            {consultationOpen && locationError && <small className="location-error">{locationError}</small>}
+            {consultationOpen && locationStatus === 'found' && <small className="location-success"><PhoneCall size={14} /> Search opened in a new tab. Call the clinic before visiting.</small>}
+            {consultationOpen && providersLoading && <div className="provider-loading">Searching nearby hospitals and clinics...</div>}
+            {providers.length > 0 && <div className="provider-list">{providers.map(provider => <article className="provider-item" key={`${provider.id}-${provider.name}`}><div><strong>{provider.name}</strong><span>{provider.type}</span></div><p><MapPin size={14} /> {provider.address || 'Address not listed'}</p><p><PhoneCall size={14} /> {provider.phone || 'Phone not listed'}</p>{(!provider.address || !provider.phone) && <a className="provider-contact-link" href={provider.searchUrl} target="_blank" rel="noreferrer">Find missing contact details <ExternalLink size={13} /></a>}<a href={provider.mapUrl} target="_blank" rel="noreferrer">Open map <ExternalLink size={13} /></a></article>)}</div>}
+          {!consultationOpen && <button className="consultation-button" onClick={findNearbyDoctors}><Navigation size={17} /> Find nearby doctors</button>}
+          </div></div>}
 
         {/* ── Metrics Row ── */}
         <div className="metrics-row">

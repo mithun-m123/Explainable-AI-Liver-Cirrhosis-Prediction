@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { ArrowRight, Eye, EyeOff, Microscope, ScanLine, ShieldCheck, Sparkles } from 'lucide-react';
 import '../styles/pages/HomePage.css';
 import api from '../api';
 
@@ -7,6 +8,7 @@ const HomePage = ({ onLogin }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -81,31 +83,32 @@ const HomePage = ({ onLogin }) => {
     <div className="home-page">
       <div className="hero-section">
         <div className="hero-content">
-          <h1>🏥 Liver Cirrhosis Detection System</h1>
-          <p>AI-Powered Non-invasive Detection using Machine Learning & Deep Learning</p>
-          <p className="subtitle">Early detection for better outcomes</p>
+          <div className="eyebrow"><span className="status-dot" /> Liver intelligence platform <span>v2.4</span></div>
+          <h1>See the liver<br /><em>more clearly.</em></h1>
+          <p>Non-invasive cirrhosis screening that brings clinical signals and explainable AI into one calm workspace.</p>
+          <div className="hero-meta"><span><ShieldCheck size={17} /> Private by design</span><span><Sparkles size={17} /> Explainable results</span></div>
         </div>
       </div>
 
       <div className="content-container">
         <div className="features-grid">
           <div className="feature-card">
-            <div className="feature-icon">🔬</div>
+            <div className="feature-icon"><Microscope size={25} /></div>
             <h3>Accurate Diagnosis</h3>
             <p>Hybrid ML+DL models for precise cirrhosis detection and staging</p>
           </div>
           <div className="feature-card">
-            <div className="feature-icon">📊</div>
+            <div className="feature-icon"><ScanLine size={25} /></div>
             <h3>Explainable AI</h3>
             <p>SHAP, LIME, and Grad-CAM explanations for transparent predictions</p>
           </div>
           <div className="feature-card">
-            <div className="feature-icon">🩺</div>
+            <div className="feature-icon"><ShieldCheck size={25} /></div>
             <h3>Medical Insights</h3>
             <p>Comprehensive analysis of symptoms and medical imaging</p>
           </div>
           <div className="feature-card">
-            <div className="feature-icon">💬</div>
+            <div className="feature-icon"><Sparkles size={25} /></div>
             <h3>AI Chatbot</h3>
             <p>Medical chatbot for personalized guidance and recommendations</p>
           </div>
@@ -148,13 +151,16 @@ const HomePage = ({ onLogin }) => {
                 <div className="form-group">
                   <label>Password</label>
                   <input
-                    type="password"
+                      type={showPassword ? 'text' : 'password'}
                     name="password"
                     value={formData.password}
                     onChange={handleChange}
                     placeholder="Enter your password"
                     required
-                  />
+                    />
+                    <button type="button" className="password-toggle" onClick={() => setShowPassword(prev => !prev)} aria-label={showPassword ? 'Hide password' : 'Show password'}>
+                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
                 </div>
 
                 {!isLogin && (
@@ -176,7 +182,7 @@ const HomePage = ({ onLogin }) => {
                   className="btn-submit"
                   disabled={loading}
                 >
-                  {loading ? 'Processing...' : isLogin ? 'Login' : 'Register'}
+                  {loading ? 'Processing...' : isLogin ? <>Enter workspace <ArrowRight size={17} /></> : <>Create account <ArrowRight size={17} /></>}
                 </button>
               </form>
 

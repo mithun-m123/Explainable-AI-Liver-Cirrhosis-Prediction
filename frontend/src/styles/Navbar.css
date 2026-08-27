@@ -1,13 +1,13 @@
 /* ── Navbar ──────────────────────────── */
 .navbar {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #173042;
   color: white;
   height: 70px;
   padding: 0 1.5rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  box-shadow: 0 2px 12px rgba(102,126,234,0.3);
+  box-shadow: 0 8px 24px rgba(23,48,66,0.15);
   position: sticky;
   top: 0;
   z-index: 1000;
@@ -47,6 +47,8 @@
   letter-spacing: -0.3px;
 }
 
+.brand-icon { display: grid; place-items: center; color: #ef8354; }
+
 .brand-icon { font-size: 1.3em; }
 .brand-text { white-space: nowrap; }
 
@@ -76,6 +78,9 @@
 }
 
 .nav-link {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
   color: white;
   text-decoration: none;
   font-weight: 500;
@@ -106,6 +111,9 @@
 }
 
 .nav-logout {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
   background: rgba(255,255,255,0.18);
   border: 1px solid rgba(255,255,255,0.5);
   color: white;

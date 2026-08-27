@@ -5,6 +5,8 @@
   padding: 2rem;
 }
 
+.diagnosis-page { background: #f7faf8; background-image: linear-gradient(rgba(8,127,140,.04) 1px, transparent 1px), linear-gradient(90deg, rgba(8,127,140,.04) 1px, transparent 1px); background-size: 32px 32px; }.diagnosis-header { max-width: 950px; margin-left: auto; margin-right: auto; text-align: left; }.diagnosis-header h1, .mode-selector-header h1 { color: #173042; font-family: Fraunces, Georgia, serif; letter-spacing: -.025em; }.diagnosis-container { border: 1px solid #deebe8; box-shadow: 0 18px 45px rgba(23,48,66,.08); }.tabs { background: #edf5f3; border-bottom-color: #dce9e6; }.tab.active { color: #087f8c; border-bottom-color: #087f8c; }.tab:hover { background: #e2f0ed; color: #087f8c; }.form-section { border: 0; box-shadow: none; }.section-header h3 { color: #173042; }.form-group input[type="text"], .form-group input[type="number"], .form-group select { background: #fbfdfc; border-color: #c6d9d5; }.form-group input:focus, .form-group select:focus { border-color: #087f8c; box-shadow: 0 0 0 3px rgba(8,127,140,.12); }.checkbox-card.checked { border-color: #087f8c; background: #eaf5f3; color: #087f8c; }.btn-next, .btn-submit.btn-primary, .btn-extract { background: #087f8c; }.range-badge { background: #087f8c; }.mode-card { border-color: #deebe8; box-shadow: 0 12px 30px rgba(23,48,66,.06); }.mode-card:hover { border-color: #087f8c; box-shadow: 0 16px 35px rgba(23,48,66,.11); transform: translateY(-4px); }.mode-card-btn { border-radius: 7px; }
+
 .diagnosis-header {
   text-align: center;
   margin-bottom: 2rem;

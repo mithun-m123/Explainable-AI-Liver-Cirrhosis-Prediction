@@ -55,6 +55,8 @@
   border-left: 3px solid #667eea;
 }
 
+.sidebar { background: #173042; border-right: 0; box-shadow: 8px 0 26px rgba(23,48,66,.12); }.sidebar-section h3 { color: #86b8b8; }.sidebar-link { color: #c4d5d7; border-radius: 7px; }.sidebar-link:hover { background: #214455; color: #fff; }.sidebar-link.active { background: #087f8c; color: #fff; border-left: 0; box-shadow: 0 7px 16px rgba(8,127,140,.25); }
+
 @media (max-width: 768px) {
   .sidebar { width: 220px; }
 }

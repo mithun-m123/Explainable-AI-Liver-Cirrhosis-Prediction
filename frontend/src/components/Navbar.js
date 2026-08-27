@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { Activity, LogOut, Menu, MessageCircle } from 'lucide-react';
 import '../styles/Navbar.css';
 
 const Navbar = ({ toggleSidebar, isAuthenticated, userRole, userData, onLogout }) => {
@@ -21,11 +22,11 @@ const Navbar = ({ toggleSidebar, isAuthenticated, userRole, userData, onLogout }
       <div className="navbar-left">
         {isAuthenticated && (
           <button className="sidebar-toggle" onClick={toggleSidebar} aria-label="Toggle sidebar">
-            ☰
+            <Menu size={20} />
           </button>
         )}
         <Link to={isAuthenticated ? '/diagnosis' : '/'} className="navbar-brand">
-          <span className="brand-icon">🏥</span>
+          <span className="brand-icon"><Activity size={21} /></span>
           <span className="brand-text">LiverAI</span>
         </Link>
       </div>
@@ -37,14 +38,14 @@ const Navbar = ({ toggleSidebar, isAuthenticated, userRole, userData, onLogout }
       <div className="navbar-right">
         {isAuthenticated ? (
           <>
-            <Link to="/chatbot" className="nav-link">💬 Chatbot</Link>
+            <Link to="/chatbot" className="nav-link"><MessageCircle size={17} /> Chatbot</Link>
             {userData && (
               <div className="user-chip">
                 <span className="user-name">{userData.full_name || userData.email}</span>
                 <span className="user-role">{roleLabel[userRole] || userRole}</span>
               </div>
             )}
-            <button className="nav-logout" onClick={handleLogout}>Logout</button>
+            <button className="nav-logout" onClick={handleLogout}><LogOut size={16} /> Logout</button>
           </>
         ) : (
           <Link to="/" className="nav-link">Login</Link>
