@@ -10,6 +10,7 @@ from fastapi import FastAPI, HTTPException, Depends, File, UploadFile, Form, Bac
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import JSONResponse, FileResponse
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
 import uvicorn
@@ -341,6 +342,7 @@ async def predict_cirrhosis(
     background_tasks: BackgroundTasks,
     symptoms: str = Form(...),
     image: Optional[UploadFile] = File(None),
+    assessment_mode: str = Form("symptoms_labs"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -350,6 +352,8 @@ async def predict_cirrhosis(
         # Parse symptoms
         symptom_payload = json.loads(symptoms)
         symptom_data = SymptomData(**symptom_payload)
+        if assessment_mode not in {"symptoms_only", "symptoms_labs", "full"}:
+            raise HTTPException(status_code=422, detail="Invalid assessment mode")
 
         # Process image if provided
         image_data = None
@@ -361,7 +365,8 @@ async def predict_cirrhosis(
         # Make prediction
         prediction_result = await model_handler.predict(
             symptoms=symptom_data,
-            image=image_data
+            image=image_data,
+            symptoms_only=assessment_mode == "symptoms_only",
         )
 
         # Generate explanations
@@ -409,6 +414,11 @@ async def predict_cirrhosis(
             processing_time_seconds=round(time.perf_counter() - started_at, 3)
         )
 
+    except ValidationError as e:
+        logger.warning("Invalid diagnosis data: %s", e)
+        raise HTTPException(status_code=422, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Prediction error: {str(e)}")
         raise HTTPException(status_code=500, detail="Prediction failed")
@@ -418,10 +428,13 @@ async def diagnosis_predict_alias(
     background_tasks: BackgroundTasks,
     symptoms: str = Form(...),
     image: Optional[UploadFile] = File(None),
+    assessment_mode: str = Form("symptoms_labs"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    return await predict_cirrhosis(background_tasks, symptoms, image, current_user, db)
+    return await predict_cirrhosis(
+        background_tasks, symptoms, image, assessment_mode, current_user, db
+    )
 
 @app.get("/history", response_model=List[Dict[str, Any]])
 async def get_diagnosis_history(

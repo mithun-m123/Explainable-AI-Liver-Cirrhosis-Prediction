@@ -107,6 +107,7 @@ const DiagnosisPage = ({ onPrediction }) => {
   const [selectedMode,     setSelectedMode]     = useState(null);
   const [activeTab,        setActiveTab]        = useState('symptoms');
   const [symptoms,         setSymptoms]         = useState(DEFAULT_SYMPTOMS);
+  const [providedLabValues, setProvidedLabValues] = useState(new Set());
   const [imageFile,        setImageFile]        = useState(null);
   const [imagePreview,     setImagePreview]     = useState(null);
   const [loading,          setLoading]          = useState(false);
@@ -126,6 +127,9 @@ const DiagnosisPage = ({ onPrediction }) => {
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
+    if (OCR_EXTRACTABLE.has(name)) {
+      setProvidedLabValues(prev => new Set(prev).add(name));
+    }
     setSymptoms(prev => ({
       ...prev,
       [name]: type === 'checkbox' ? checked
@@ -183,6 +187,7 @@ const DiagnosisPage = ({ onPrediction }) => {
         return;
       }
       setSymptoms(prev => ({ ...prev, ...extracted }));
+      setProvidedLabValues(prev => new Set([...prev, ...Object.keys(extracted)]));
       setOcrResult({ status: 'success', extracted, missing });
     } catch (err) {
       setOcrResult({ status: 'error', message: err.response?.data?.detail || 'Failed to process image.' });
@@ -191,6 +196,11 @@ const DiagnosisPage = ({ onPrediction }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const missingLabs = LAB_FIELDS.filter(({ name }) => !providedLabValues.has(name));
+    if (selectedMode !== 'symptoms_only' && missingLabs.length) {
+      setError(`Enter or extract all required lab results before diagnosis: ${missingLabs.map(({ label }) => label).join(', ')}.`);
+      return;
+    }
     if (!symptoms.age || isNaN(symptoms.age) || symptoms.age < 1) {
       setError('Please enter a valid age.'); return;
     }
@@ -198,6 +208,7 @@ const DiagnosisPage = ({ onPrediction }) => {
     try {
       const form = new FormData();
       form.append('symptoms', JSON.stringify(symptoms));
+      form.append('assessment_mode', selectedMode);
       if (imageFile && tabs.includes('imaging')) form.append('image', imageFile);
       const response = await api.post('/predict', form, {
         headers: { 'Content-Type': 'multipart/form-data' },

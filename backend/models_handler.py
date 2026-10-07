@@ -103,7 +103,10 @@ class HybridModelHandler:
     # ── Public API ────────────────────────────────────────────────────────────
 
     async def predict(
-        self, symptoms: SymptomData, image: Optional[np.ndarray] = None
+        self,
+        symptoms: SymptomData,
+        image: Optional[np.ndarray] = None,
+        symptoms_only: bool = False,
     ) -> PredictionResult:
 
         features = self._symptom_to_features(symptoms)
@@ -115,13 +118,20 @@ class HybridModelHandler:
         else:
             features_scaled = features
 
-        # Try ensemble prediction
-        ensemble_proba = self._ensemble_predict(features_scaled)
+        # The trained clinical models require lab values; never use placeholder
+        # labs to produce a symptoms-only result.
+        if symptoms_only:
+            rule_score = self._symptom_only_score(symptoms)
+            predicted_class = int(np.clip(round(rule_score * 3), 0, 3))
+            confidence = float(np.clip(0.55 + abs(rule_score - 0.5) * 0.4, 0.50, 0.85))
+            ensemble_proba = self._stage_probs_from_score(rule_score)
+        else:
+            ensemble_proba = self._ensemble_predict(features_scaled)
 
-        if ensemble_proba is not None:
+        if not symptoms_only and ensemble_proba is not None:
             predicted_class = int(np.argmax(ensemble_proba))
             confidence      = float(ensemble_proba[predicted_class])
-        else:
+        elif not symptoms_only:
             # Pure rule-based fallback
             rule_score      = self._rule_score(symptoms)
             predicted_class = int(np.clip(round(rule_score * 3), 0, 3))
@@ -269,6 +279,25 @@ class HybridModelHandler:
         score += np.clip((150000 - s.platelets) / 100000, 0, 1) * 0.06
         score += np.clip((s.prothrombin - 12) / 6, 0, 1) * 0.05
         return float(np.clip(score, 0, 1))
+
+    def _symptom_only_score(self, s: SymptomData) -> float:
+        score = 0.0
+        score += min(s.age / 100, 1) * 0.08
+        score += min(s.fatigue_level / 10, 1) * 0.07
+        score += min(s.alcohol_consumption / 35, 1) * 0.10
+        score += min(s.weight_loss_kg / 15, 1) * 0.07
+        score += 0.07 if s.abdominal_swelling else 0
+        score += 0.05 if s.appetite_loss else 0
+        score += 0.10 if s.jaundice else 0
+        ascites_present = 1.0 if isinstance(s.ascites, bool) and s.ascites else min(float(s.ascites) / 3, 1)
+        hepatomegaly_present = 1.0 if isinstance(s.hepatomegaly, bool) and s.hepatomegaly else min(float(s.hepatomegaly) / 3, 1)
+        spiders_present = 1.0 if isinstance(s.spiders, bool) and s.spiders else min(float(s.spiders) / 3, 1)
+        score += ascites_present * 0.09
+        score += hepatomegaly_present * 0.06
+        score += spiders_present * 0.07
+        score += min(float(s.edema) / 2, 1) * 0.06
+        max_symptom_score = 0.83
+        return float(np.clip(score / max_symptom_score, 0, 1))
 
     def _stage_probs_from_score(self, score: float) -> np.ndarray:
         cls = int(np.clip(round(score * 3), 0, 3))

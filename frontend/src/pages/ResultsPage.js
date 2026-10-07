@@ -312,10 +312,6 @@ const ResultsPage = ({ prediction: initialPrediction }) => {
                 </div>
               ))}
             </div>
-            <div className="disclaimer">
-              ⚕️ This AI output is for screening support only and does not replace a qualified
-              medical professional's diagnosis.
-            </div>
           </div>
         )}
 

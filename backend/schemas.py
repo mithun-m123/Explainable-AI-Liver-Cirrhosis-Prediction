@@ -40,7 +40,7 @@ class SymptomData(BaseModel):
     alcohol_consumption: float = Field(0, ge=0, le=50, description="Alcohol consumption (drinks/week)")
 
     # Physical symptoms
-    weight_loss_kg: float = Field(0, ge=0, le=20, description="Weight loss in kg")
+    weight_loss_kg: float = Field(0, ge=0, le=30, description="Weight loss in kg")
     abdominal_swelling: bool = Field(False, description="Abdominal swelling present")
     appetite_loss: bool = Field(False, description="Loss of appetite")
     jaundice: bool = Field(False, description="Jaundice present")
