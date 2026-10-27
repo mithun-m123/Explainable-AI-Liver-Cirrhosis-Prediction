@@ -1,0 +1,121 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# .gitignore — Liver Cirrhosis Detection System
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Secrets & local config ────────────────────────────────────────────────────
+.env
+*.env.local
+*.env.*.local
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.pyd
+.Python
+build/
+dist/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# ── Virtual environments ──────────────────────────────────────────────────────
+venv/
+.venv/
+env/
+ENV/
+
+# ── Testing & coverage ────────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+*.cover
+.tox/
+.nox/
+
+# ── Type checkers ─────────────────────────────────────────────────────────────
+.mypy_cache/
+.dmypy.json
+.pyre/
+.pytype/
+
+# ── Databases (local runtime files) ──────────────────────────────────────────
+*.db
+*.sqlite
+*.sqlite3
+
+# ── Generated reports (PDF outputs) ──────────────────────────────────────────
+backend/reports/*.pdf
+reports/*.pdf
+
+# ── Uploaded files ────────────────────────────────────────────────────────────
+uploads/
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── Node / Frontend ───────────────────────────────────────────────────────────
+node_modules/
+frontend/node_modules/
+.npm
+.eslintcache
+frontend/build/
+
+# ── Jupyter ───────────────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb
+
+# ── OS files ──────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── IDE & editors ─────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── Docker runtime ────────────────────────────────────────────────────────────
+.docker/
+
+# ── ML Model binaries — excluded from version control ────────────────────────
+# Large binary files (~50 MB total). Download separately — see README.
+# Metadata JSON files are still tracked (small, version-controlled).
+backend/models/*.pkl
+backend/models/*.h5
+backend/models/*.pt
+backend/models/*.pth
+!backend/models/*.json
+
+# ── Datasets — excluded from version control ─────────────────────────────────
+# Download separately — see README for sources and links.
+datasets/*.csv
+
+# ── Training artefacts ────────────────────────────────────────────────────────
+wandb/
+mlruns/
+lightning_logs/
+checkpoints/
+*.ckpt
+tensorboard_logs/
+
+# ── Miscellaneous ─────────────────────────────────────────────────────────────
+*.tmp
+*.bak
+*.orig
+pip-log.txt
+
+datasets/
+backend/models/*.pkl
+backend/models/*.h5
+backend/models/retrained_candidate/
+*.zip
+*.kaggle-partial
+__pycache__/
+*.pyc
+.env

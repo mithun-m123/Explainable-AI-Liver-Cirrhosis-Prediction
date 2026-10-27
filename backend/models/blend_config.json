@@ -1,0 +1,11 @@
+{
+  "blend_alpha": 1.0,
+  "standard_weight": 1.0,
+  "ordinal_weight": 0.0,
+  "ensemble_weights": {
+    "xgb_model": 0.3,
+    "lgbm_model": 0.3,
+    "gb_model": 0.25,
+    "rf_model": 0.15
+  }
+}

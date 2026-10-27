@@ -1,0 +1,111 @@
+version: '3.9'
+
+services:
+  # PostgreSQL Database
+  database:
+    image: postgres:16-alpine
+    container_name: liver_ai_db
+    environment:
+      POSTGRES_USER: liver_user
+      POSTGRES_PASSWORD: secure_password_change_me
+      POSTGRES_DB: liver_cirrhosis_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U liver_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - liver_network
+
+  # Backend API Service
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: liver_ai_backend
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://liver_user:secure_password_change_me@database:5432/liver_cirrhosis_db
+      PYTHONUNBUFFERED: 1
+      JWT_SECRET_KEY: your_jwt_secret_key_change_me
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    depends_on:
+      database:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app/backend
+      - ./ai_pipeline:/app/ai_pipeline
+      - ./models:/app/models
+      - ./reports:/app/reports
+      - ./uploads:/app/uploads
+    command: uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - liver_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Frontend Service
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.frontend
+    container_name: liver_ai_frontend
+    ports:
+      - "3000:3000"
+    environment:
+      REACT_APP_API_URL: http://backend:8000
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+    networks:
+      - liver_network
+
+  # Redis Cache (Optional, for session management)
+  redis:
+    image: redis:7-alpine
+    container_name: liver_ai_cache
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - liver_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: liver_ai_proxy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - liver_network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  liver_network:
+    driver: bridge

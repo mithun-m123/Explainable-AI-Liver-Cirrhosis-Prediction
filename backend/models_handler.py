@@ -1,0 +1,474 @@
+"""
+Hybrid AI model handler — updated for 20-feature schema with LightGBM.
+
+Model loading order:
+  1. Ensemble of XGBoost + LightGBM + HistGradBoost + RandomForest
+  2. Falls back to single best model (symptom_model.pkl)
+  3. Ultimate fallback: rule-based scoring
+"""
+
+import logging
+import json
+import warnings
+from pathlib import Path
+from typing import Dict, List, Optional
+
+import numpy as np
+
+warnings.filterwarnings("ignore")
+logger = logging.getLogger(__name__)
+
+try:
+    import joblib
+    JOBLIB_OK = True
+except ImportError:
+    JOBLIB_OK = False
+
+try:
+    import cv2
+    CV2_AVAILABLE = True
+except ImportError:
+    cv2 = None
+    CV2_AVAILABLE = False
+
+from schemas import PredictionResult, SymptomData
+
+# ── Feature order must match training (20 features) ──────────────────────────
+FEATURE_NAMES = [
+    "Age", "Sex", "Ascites", "Hepatomegaly", "Spiders", "Edema",
+    "Bilirubin", "Cholesterol", "Albumin", "Copper", "Alk_Phos",
+    "SGOT", "Tryglicerides", "Platelets", "Prothrombin",
+    # Clinical derived features
+    "FIB4", "APRI", "ALBI", "Bili_Alb", "PT_proxy",
+]
+
+# Ensemble weights matching training
+ENSEMBLE_WEIGHTS = {
+    "xgb_model":  0.30,
+    "lgbm_model": 0.30,
+    "gb_model":   0.25,
+    "rf_model":   0.15,
+}
+
+STAGE_DESCRIPTIONS = {
+    0: "Stage 1 - Mild Fibrosis",
+    1: "Stage 2 - Moderate Fibrosis",
+    2: "Stage 3 - Severe Fibrosis",
+    3: "Stage 4 - Cirrhosis",
+}
+
+RISK_LEVELS = {0: "low", 1: "medium", 2: "high", 3: "critical"}
+
+MODELS_DIR = Path(__file__).parent / "models"
+
+
+def _load_model(filename: str):
+    path = MODELS_DIR / filename
+    if path.exists() and JOBLIB_OK:
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                return joblib.load(path)
+        except Exception as e:
+            logger.warning("Could not load %s: %s", filename, e)
+    return None
+
+
+def _load_metadata() -> dict:
+    path = MODELS_DIR / "model_metadata.json"
+    if path.exists():
+        with open(path) as f:
+            return json.load(f)
+    return {}
+
+
+class HybridModelHandler:
+    """Runs ensemble of trained ML models, falls back to rule-based scoring."""
+
+    def __init__(self):
+        self.scaler   = _load_model("symptom_scaler.pkl")
+        self.xgb      = _load_model("xgb_model.pkl")
+        self.lgbm     = _load_model("lgbm_model.pkl")
+        self.gb       = _load_model("gb_model.pkl")
+        self.rf       = _load_model("rf_model.pkl")
+        self.best     = _load_model("symptom_model.pkl")
+        self.metadata = _load_metadata()
+
+        # Load feature list from metadata if available (handles schema changes)
+        self.features = self.metadata.get("features", FEATURE_NAMES)
+
+        loaded = [n for n, m in [
+            ("XGBoost",   self.xgb),
+            ("LightGBM",  self.lgbm),
+            ("GradBoost", self.gb),
+            ("RandomForest", self.rf),
+            ("BestSingle", self.best),
+        ] if m is not None]
+
+        if loaded:
+            logger.info("Trained models loaded: %s", ", ".join(loaded))
+        else:
+            logger.warning("No trained models found — using rule-based fallback.")
+
+    # ── Public API ────────────────────────────────────────────────────────────
+
+    async def predict(
+        self,
+        symptoms: SymptomData,
+        image: Optional[np.ndarray] = None,
+        symptoms_only: bool = False,
+    ) -> PredictionResult:
+
+        features = self._symptom_to_features(symptoms)
+
+        if self.scaler is not None:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                # Scaler was fit on all features — use full feature vector
+                features_scaled = self.scaler.transform(features)
+        else:
+            features_scaled = features
+
+        if symptoms_only:
+            rule_score      = self._symptom_only_score(symptoms)
+            predicted_class = int(np.clip(round(rule_score * 3), 0, 3))
+            confidence      = float(np.clip(0.55 + abs(rule_score - 0.5) * 0.4, 0.50, 0.85))
+            ensemble_proba  = self._stage_probs_from_score(rule_score)
+        else:
+            ensemble_proba = self._ensemble_predict(features_scaled)
+
+        if not symptoms_only and ensemble_proba is not None:
+            predicted_class = int(np.argmax(ensemble_proba))
+            confidence      = float(ensemble_proba[predicted_class])
+        elif not symptoms_only:
+            rule_score      = self._rule_score(symptoms)
+            predicted_class = int(np.clip(round(rule_score * 3), 0, 3))
+            confidence      = float(np.clip(0.55 + abs(rule_score - 0.5) * 0.4, 0.50, 0.85))
+            ensemble_proba  = self._stage_probs_from_score(rule_score)
+
+        # Blend image signal if provided
+        if image is not None and CV2_AVAILABLE:
+            img_score  = self._image_score(image)
+            img_proba  = self._stage_probs_from_score(img_score)
+            blend      = 0.75
+            ensemble_proba = blend * ensemble_proba + (1 - blend) * img_proba
+            ensemble_proba = ensemble_proba / ensemble_proba.sum()
+            predicted_class = int(np.argmax(ensemble_proba))
+            confidence      = float(ensemble_proba[predicted_class])
+
+        probabilities   = {f"stage_{i}": round(float(p), 4) for i, p in enumerate(ensemble_proba)}
+        recommendations = self._recommendations(predicted_class, confidence)
+
+        return PredictionResult(
+            stage=f"stage_{predicted_class}",
+            stage_description=STAGE_DESCRIPTIONS[predicted_class],
+            confidence=round(confidence, 4),
+            risk_level=RISK_LEVELS[predicted_class],
+            probabilities=probabilities,
+            recommendations=recommendations,
+            follow_up_required=predicted_class >= 1,
+            specialist_referral=predicted_class >= 2,
+        )
+
+    # ── Feature engineering ────────────────────────────────────────────────
+
+    def _symptom_to_features(self, s: SymptomData) -> np.ndarray:
+        """
+        Map SymptomData → 20-feature vector matching training order.
+
+        Base 15 features (dataset columns):
+          Age        → years (training uses years directly now)
+          Sex        → 0=F, 1=M
+          Ascites    → 0/1
+          Hepatomegaly → 0/1
+          Spiders    → 0/1
+          Edema      → 0=N, 1=S, 2=Y
+          Bilirubin  → mg/dL
+          Cholesterol → mg/dL
+          Albumin    → g/dL
+          Copper     → µg/dL
+          Alk_Phos   → U/L
+          SGOT       → U/L (same as AST)
+          Tryglicerides → mg/dL
+          Platelets  → x10³/µL
+          Prothrombin → seconds
+
+        Derived clinical features (computed here):
+          FIB4       = (Age * SGOT) / (Platelets * sqrt(SGOT))
+          APRI       = (SGOT/40) / (Platelets/100)
+          ALBI       = log10(Bilirubin*17.1)*0.66 + Albumin*(-0.085)
+          Bili_Alb   = Bilirubin / Albumin
+          PT_proxy   = Prothrombin / 11
+        """
+        age        = float(s.age)           # years
+        bilirubin  = float(s.bilirubin)
+        albumin    = float(s.albumin)
+        sgot       = float(s.ast)
+        platelets  = float(s.platelets)
+        prothrombin = float(s.prothrombin)
+
+        # Categorical encodings
+        ascites_enc  = 1.0 if (s.ascites if isinstance(s.ascites, bool) else s.ascites >= 1) else 0.0
+        hepato_enc   = 1.0 if (s.hepatomegaly if isinstance(s.hepatomegaly, bool) else s.hepatomegaly >= 1) else 0.0
+        spiders_enc  = 1.0 if (s.spiders if isinstance(s.spiders, bool) else s.spiders >= 1) else 0.0
+        if isinstance(s.edema, bool):
+            edema_enc = 2.0 if s.edema else 0.0
+        else:
+            edema_enc = float(min(int(s.edema), 2))
+
+        # Derived clinical features
+        sgot_safe      = max(sgot, 1.0)
+        platelets_safe = max(platelets, 1.0)
+        albumin_safe   = max(albumin, 0.1)
+        bilirubin_safe = max(bilirubin, 0.1)
+
+        fib4     = (age * sgot_safe) / (platelets_safe * np.sqrt(sgot_safe))
+        apri     = (sgot_safe / 40.0) / (platelets_safe / 100.0)
+        albi     = np.log10(bilirubin_safe * 17.1) * 0.66 + albumin_safe * (-0.085)
+        bili_alb = bilirubin_safe / albumin_safe
+        pt_proxy = prothrombin / 11.0
+
+        # Clip derived features to training range
+        fib4     = float(np.clip(fib4, 0, 50))
+        apri     = float(np.clip(apri, 0, 20))
+        albi     = float(np.clip(albi, -4, 2))
+        bili_alb = float(np.clip(bili_alb, 0, 30))
+        pt_proxy = float(np.clip(pt_proxy, 0.5, 2.5))
+
+        vec = [
+            age,                        # Age (years)
+            float(s.sex),               # Sex 0=F 1=M
+            ascites_enc,                # Ascites
+            hepato_enc,                 # Hepatomegaly
+            spiders_enc,                # Spiders
+            edema_enc,                  # Edema
+            bilirubin,                  # Bilirubin mg/dL
+            float(s.cholesterol),       # Cholesterol mg/dL
+            albumin,                    # Albumin g/dL
+            float(s.copper),            # Copper µg/dL
+            float(s.alk_phos),          # Alk_Phos U/L
+            sgot,                       # SGOT / AST U/L
+            float(s.triglycerides),     # Tryglicerides mg/dL
+            platelets,                  # Platelets x10³/µL
+            prothrombin,                # Prothrombin sec
+            fib4,                       # FIB-4 index
+            apri,                       # APRI score
+            albi,                       # ALBI grade
+            bili_alb,                   # Bilirubin/Albumin ratio
+            pt_proxy,                   # Prothrombin/11 proxy
+        ]
+
+        # If scaler was trained on fewer features (old schema), trim vector
+        n_expected = len(self.features)
+        if len(vec) > n_expected:
+            vec = vec[:n_expected]
+
+        return np.array([vec], dtype=np.float32)
+
+    # ── Ensemble logic ──────────────────────────────────────────────────────
+
+    def _ensemble_predict(self, X: np.ndarray) -> Optional[np.ndarray]:
+        """Weighted soft-vote across all available trained models."""
+        probas  = []
+        weights = []
+
+        model_list = [
+            (self.xgb,  "xgb_model"),
+            (self.lgbm, "lgbm_model"),
+            (self.gb,   "gb_model"),
+            (self.rf,   "rf_model"),
+        ]
+
+        for model, name in model_list:
+            if model is None:
+                continue
+            try:
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    p = model.predict_proba(X)[0]
+                if len(p) == 4:
+                    probas.append(p)
+                    weights.append(ENSEMBLE_WEIGHTS.get(name, 0.25))
+            except Exception as e:
+                logger.debug("Model predict error (%s): %s", name, e)
+
+        # Fall back to single best model
+        if not probas and self.best is not None:
+            try:
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    p = self.best.predict_proba(X)[0]
+                if len(p) == 4:
+                    return np.array(p)
+            except Exception as e:
+                logger.debug("Best model error: %s", e)
+
+        if not probas:
+            return None
+
+        total_w = sum(weights)
+        blended = sum(w * p for w, p in zip(weights, probas)) / total_w
+        return blended / blended.sum()
+
+    # ── Rule-based fallback ────────────────────────────────────────────────
+
+    def _rule_score(self, s: SymptomData) -> float:
+        score = 0.0
+        score += min(s.age / 100, 1) * 0.08
+        score += min(s.fatigue_level / 10, 1) * 0.07
+        score += min(s.alcohol_consumption / 35, 1) * 0.10
+        score += min(s.weight_loss_kg / 15, 1) * 0.07
+        score += 0.07 if s.abdominal_swelling else 0
+        score += 0.05 if s.appetite_loss else 0
+        score += 0.10 if s.jaundice else 0
+        score += min(s.ascites / 3, 1) * 0.09
+        score += min(s.hepatomegaly / 3, 1) * 0.06
+        score += min(s.edema / 3, 1) * 0.06
+        score += np.clip((s.bilirubin - 1.2) / 8, 0, 1) * 0.09
+        score += np.clip((3.5 - s.albumin) / 2.5, 0, 1) * 0.08
+        score += np.clip((s.ast - 45) / 250, 0, 1) * 0.07
+        score += np.clip((150000 - s.platelets) / 100000, 0, 1) * 0.06
+        score += np.clip((s.prothrombin - 12) / 6, 0, 1) * 0.05
+        return float(np.clip(score, 0, 1))
+
+    def _symptom_only_score(self, s: SymptomData) -> float:
+        score = 0.0
+        score += min(s.age / 100, 1) * 0.08
+        score += min(s.fatigue_level / 10, 1) * 0.07
+        score += min(s.alcohol_consumption / 35, 1) * 0.10
+        score += min(s.weight_loss_kg / 15, 1) * 0.07
+        score += 0.07 if s.abdominal_swelling else 0
+        score += 0.05 if s.appetite_loss else 0
+        score += 0.10 if s.jaundice else 0
+        ascites_v     = 1.0 if isinstance(s.ascites, bool) and s.ascites else min(float(s.ascites) / 3, 1)
+        hepatomeg_v   = 1.0 if isinstance(s.hepatomegaly, bool) and s.hepatomegaly else min(float(s.hepatomegaly) / 3, 1)
+        spiders_v     = 1.0 if isinstance(s.spiders, bool) and s.spiders else min(float(s.spiders) / 3, 1)
+        score += ascites_v   * 0.09
+        score += hepatomeg_v * 0.06
+        score += spiders_v   * 0.07
+        score += min(float(s.edema) / 2, 1) * 0.06
+        return float(np.clip(score / 0.83, 0, 1))
+
+    def _stage_probs_from_score(self, score: float) -> np.ndarray:
+        cls  = int(np.clip(round(score * 3), 0, 3))
+        conf = float(np.clip(0.55 + abs(score - 0.5) * 0.4, 0.50, 0.85))
+        probs = np.ones(4) * ((1 - conf) / 3)
+        probs[cls] = conf
+        return probs / probs.sum()
+
+    # ── Image scoring ──────────────────────────────────────────────────────
+
+    def _image_score(self, image: np.ndarray) -> float:
+        img_model  = _load_model("image_model.pkl")
+        img_scaler = _load_model("image_scaler.pkl")
+        img_le     = _load_model("image_label_encoder.pkl")
+
+        if img_model is not None and img_scaler is not None and img_le is not None:
+            try:
+                feat   = self._extract_image_features(image)
+                feat_s = img_scaler.transform([feat])
+                proba  = img_model.predict_proba(feat_s)[0]
+                classes  = list(img_le.classes_)
+                risk_map = {"Normal": 0.10, "Benign": 0.50, "Malignant": 0.95}
+                score    = sum(proba[i] * risk_map.get(c, 0.5) for i, c in enumerate(classes))
+                return float(np.clip(score, 0, 1))
+            except Exception as e:
+                logger.warning("Image model inference failed: %s", e)
+
+        if not CV2_AVAILABLE:
+            return 0.5
+        try:
+            gray     = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
+            gray     = cv2.resize(gray, (256, 256))
+            texture  = float(cv2.Laplacian(gray, cv2.CV_64F).var())
+            contrast = float(gray.std())
+            return float(np.clip(
+                0.55 * np.clip(texture / 1600, 0, 1) +
+                0.45 * np.clip(contrast / 90, 0, 1), 0, 1
+            ))
+        except Exception as e:
+            logger.warning("Image scoring fallback error: %s", e)
+            return 0.5
+
+    def _extract_image_features(self, image: np.ndarray) -> np.ndarray:
+        IMG_SIZE = (128, 128)
+        if len(image.shape) == 2:
+            img_rgb = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
+        elif image.shape[2] == 4:
+            img_rgb = cv2.cvtColor(image, cv2.COLOR_BGRA2RGB)
+        else:
+            img_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        img_rgb = cv2.resize(img_rgb, IMG_SIZE)
+        gray    = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2GRAY)
+
+        resized = cv2.resize(gray, (64, 64))
+        gx = cv2.Sobel(resized, cv2.CV_32F, 1, 0, ksize=3)
+        gy = cv2.Sobel(resized, cv2.CV_32F, 0, 1, ksize=3)
+        mag, ang = cv2.cartToPolar(gx, gy, angleInDegrees=True)
+        hog_feats, cell = [], 8
+        for i in range(0, resized.shape[0], cell):
+            for j in range(0, resized.shape[1], cell):
+                cm   = mag[i:i+cell, j:j+cell]
+                ca   = ang[i:i+cell, j:j+cell] % 180
+                hist = np.zeros(9)
+                for b in range(9):
+                    mask = (ca >= b*20) & (ca < (b+1)*20)
+                    hist[b] = cm[mask].sum()
+                if hist.sum() > 0:
+                    hist /= hist.sum()
+                hog_feats.extend(hist)
+        hog = np.array(hog_feats, dtype=np.float32)
+
+        f        = gray.astype(np.float32)
+        mean     = f.mean(); std = f.std()
+        skew     = float(np.mean(((f - mean) / (std + 1e-8)) ** 3))
+        kurt     = float(np.mean(((f - mean) / (std + 1e-8)) ** 4))
+        lap_var  = float(cv2.Laplacian(gray, cv2.CV_64F).var())
+        dx       = np.diff(f, axis=1); dy = np.diff(f, axis=0)
+        contrast = float(np.mean(dx**2) + np.mean(dy**2))
+        tex      = np.array([mean, std, skew, kurt, lap_var, contrast], dtype=np.float32)
+
+        chist = []
+        for ch in range(3):
+            h2, _ = np.histogram(img_rgb[:, :, ch], bins=32, range=(0, 256))
+            chist.extend(h2.astype(np.float32) / (h2.sum() + 1e-8))
+        chist = np.array(chist)
+
+        gray_s  = cv2.resize(gray, (32, 32))
+        lbp_h, _ = np.histogram(gray_s.ravel(), bins=64, range=(0, 256))
+        lbp      = lbp_h.astype(np.float32) / (lbp_h.sum() + 1e-8)
+
+        return np.concatenate([hog, tex, chist, lbp])
+
+    # ── Recommendations ────────────────────────────────────────────────────
+
+    def _recommendations(self, stage: int, confidence: float) -> List[str]:
+        recs = {
+            0: [
+                "Consult a hepatologist for baseline evaluation and monitoring.",
+                "Avoid alcohol and hepatotoxic medications.",
+                "Monitor liver function tests every 6-12 months.",
+            ],
+            1: [
+                "Schedule specialist consultation for fibrosis assessment.",
+                "Follow a liver-friendly diet with reduced salt and alcohol.",
+                "Repeat imaging and clinical monitoring as advised.",
+            ],
+            2: [
+                "Urgent hepatology review is strongly recommended.",
+                "Screen for cirrhosis complications and portal hypertension.",
+                "Discuss intensive monitoring and long-term care planning.",
+            ],
+            3: [
+                "Immediate specialist management is required.",
+                "Evaluate for advanced cirrhosis complications and transplant pathway.",
+                "Seek emergency care for bleeding, confusion, fever, or severe swelling.",
+            ],
+        }
+        result = list(recs.get(stage, recs[0]))
+        if confidence < 0.65:
+            result.append(
+                "Prediction confidence is moderate - confirm with clinical tests and specialist review."
+            )
+        result.append("This AI output supports clinical screening only and is not a final medical diagnosis.")
+        return result
