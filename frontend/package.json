@@ -1,26 +1,21 @@
 {
-  "name": "frontend",
-  "version": "1.0.0",
-  "description": "",
-  "main": "src/index.js",
+  "name": "liver-cirrhosis-frontend",
+  "version": "2.0.0",
+  "private": true,
+  "dependencies": {
+    "axios": "^1.7.9",
+    "lucide-react": "^1.64.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.28.0",
+    "react-scripts": "5.0.1",
+    "recharts": "^3.10.1"
+  },
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
-    "test": "react-scripts test",
+    "test": "react-scripts test --watchAll=false",
     "eject": "react-scripts eject"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "dependencies": {
-    "axios": "^1.16.1",
-    "lucide-react": "^1.14.0",
-    "react": "^19.2.6",
-    "react-dom": "^19.2.6",
-    "react-router": "^7.15.0",
-    "react-router-dom": "^7.15.0",
-    "react-scripts": "^5.0.1",
-    "recharts": "^3.8.1"
   },
   "browserslist": {
     "production": [
@@ -29,9 +24,9 @@
       "not op_mini all"
     ],
     "development": [
-      "last 1 chrome version",
-      "last 1 firefox version",
-      "last 1 safari version"
+      "last 2 chrome versions",
+      "last 2 firefox versions",
+      "last 2 safari versions"
     ]
   }
 }

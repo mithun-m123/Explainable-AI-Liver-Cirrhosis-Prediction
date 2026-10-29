@@ -1,302 +1,99 @@
 import axios from 'axios';
 
-// API Configuration
-const API_BASE_URL = process.env.REACT_APP_API_URL || "http://127.0.0.1:8000";
+const API_BASE_URL = (process.env.REACT_APP_API_URL || 'http://127.0.0.1:8000').replace(/\/+$/, '');
 
-// Create axios instance with default config
 const api = axios.create({
-    baseURL: API_BASE_URL,
-    timeout: 30000, // 30 seconds timeout
-    headers: {
-        'Content-Type': 'application/json',
-    },
+  baseURL: API_BASE_URL,
+  timeout: 120000,
+  headers: { Accept: 'application/json' },
 });
 
-// Request interceptor for auth
-api.interceptors.request.use(
-    (config) => {
-        const token = localStorage.getItem('auth_token');
-        if (token) {
-            config.headers.Authorization = `Bearer ${token}`;
-        }
-        return config;
-    },
-    (error) => {
-        return Promise.reject(error);
-    }
-);
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('auth_token');
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  // Do not set Content-Type globally: the browser/Axios must set multipart boundaries for FormData.
+  return config;
+});
 
-// Response interceptor for error handling
 api.interceptors.response.use(
-    (response) => response,
-    (error) => {
-        if (error.response?.status === 401) {
-            // Token expired or invalid
-            localStorage.removeItem('auth_token');
-            localStorage.removeItem('userData');
-            window.location.href = '/';
-        }
-        return Promise.reject(error);
+  (response) => response,
+  (error) => {
+    const url = String(error.config?.url || '');
+    const isAuthRequest = url.startsWith('/auth/login') || url.startsWith('/auth/register');
+    if (error.response?.status === 401 && !isAuthRequest) {
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('userData');
+      window.dispatchEvent(new Event('liverai:auth-expired'));
     }
+    return Promise.reject(error);
+  }
 );
 
-// Auth API
+export function getErrorMessage(error) {
+  const detail = error?.response?.data?.detail;
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail)) return detail.map((item) => item.msg || item.message || JSON.stringify(item)).join('; ');
+  if (error?.response?.data?.message) return error.response.data.message;
+  if (error?.code === 'ECONNABORTED') return 'The request timed out. Check that the backend is running and try again.';
+  if (error?.request && !error?.response) return `Cannot reach the backend at ${API_BASE_URL}. Start FastAPI and verify REACT_APP_API_URL.`;
+  return error?.message || 'An unexpected error occurred.';
+}
+
 export const authAPI = {
-    register: async (userData) => {
-        const response = await api.post('/auth/register', userData);
-        return response.data;
-    },
-
-    login: async (credentials) => {
-        const response = await api.post('/auth/login', credentials);
-        const { access_token } = response.data;
-        if (access_token) {
-            localStorage.setItem('auth_token', access_token);
-        }
-        return response.data;
-    },
-
-    logout: () => {
-        localStorage.removeItem('auth_token');
-    },
-
-    getCurrentUser: async () => {
-        const response = await api.get('/auth/me');
-        return response.data;
-    },
-
-    updateProfile: async (userData) => {
-        const response = await api.put('/auth/profile', userData);
-        return response.data;
-    },
+  async login(credentials) { return (await api.post('/auth/login', credentials)).data; },
+  async register(user) { return (await api.post('/auth/register', user)).data; },
+  async me() { return (await api.get('/auth/me')).data; },
 };
 
-// Diagnosis API
 export const diagnosisAPI = {
-    performDiagnosis: async (diagnosisData) => {
-        const formData = new FormData();
-
-        // Add user ID
-        formData.append("user_id", diagnosisData.userId);
-
-        // Add symptoms as JSON string
-        formData.append("symptoms", JSON.stringify(diagnosisData.symptoms));
-
-        // Add image if provided
-        if (diagnosisData.imageFile) {
-            formData.append("image", diagnosisData.imageFile);
-        }
-
-        const response = await api.post('/predict', formData, {
-            headers: {
-                'Content-Type': 'multipart/form-data',
-            },
-        });
-        return response.data;
-    },
-
-    getDiagnosisHistory: async (page = 1, limit = 10) => {
-        const skip = (page - 1) * limit;
-        const response = await api.get('/history', {
-            params: { skip, limit }
-        });
-        return response.data;
-    },
-
-    getDiagnosisById: async (diagnosisId) => {
-        const response = await api.get(`/diagnoses/${diagnosisId}`);
-        return response.data;
-    },
-
-    deleteDiagnosis: async (diagnosisId) => {
-        const response = await api.delete(`/diagnoses/${diagnosisId}`);
-        return response.data;
-    },
+  async predict({ symptoms, assessmentMode, imageFile }) {
+    const form = new FormData();
+    form.append('symptoms', JSON.stringify(symptoms));
+    form.append('assessment_mode', assessmentMode);
+    if (imageFile) form.append('image', imageFile);
+    return (await api.post('/predict', form)).data;
+  },
+  async extractLabs(imageFile) {
+    const form = new FormData();
+    form.append('image', imageFile);
+    return (await api.post('/labs/extract-from-image', form)).data;
+  },
+  async history({ skip = 0, limit = 10 } = {}) {
+    return (await api.get('/history', { params: { skip, limit } })).data;
+  },
+  async result(id) { return (await api.get(`/diagnosis/results/${encodeURIComponent(id)}`)).data; },
 };
 
-// Chatbot API
-export const chatbotAPI = {
-    startChatSession: async (userId) => {
-        const response = await api.post('/chat/start', {
-            message: 'start',
-            session_type: 'medical_qa',
-            context: { user_id: userId }
-        });
-        return response.data;
-    },
-
-    sendMessage: async (sessionId, message) => {
-        const response = await api.post('/chat/message', {
-            session_id: sessionId,
-            message: message
-        });
-        return response.data;
-    },
-
-    getChatHistory: async (sessionId) => {
-        const response = await api.get(`/chat/history/${sessionId}`);
-        return response.data;
-    },
-
-    getChatSessions: async (userId) => {
-        const response = await api.get('/chat/sessions', {
-            params: { user_id: userId }
-        });
-        return response.data;
-    },
-};
-
-// Patients API (doctor tools)
-export const patientsAPI = {
-    list: async () => {
-        const response = await api.get('/patients');
-        return response.data;
-    },
-    add: async (patientData) => {
-        const response = await api.post('/patients/add', patientData);
-        return response.data;
-    },
-};
-
-// Deactivate (remove active) a patient
-patientsAPI.deactivate = async (patientId) => {
-    const response = await api.post(`/patients/${patientId}/deactivate`);
-    return response.data;
-};
-
-// Reports API
 export const reportsAPI = {
-    generateReport: async (diagnosisId) => {
-        const response = await api.post(`/reports/generate/${diagnosisId}`, {}, {
-            responseType: 'blob' // For file download
-        });
-        return response.data;
-    },
-
-    downloadReport: async (diagnosisId, filename = 'liver_report.pdf') => {
-        const response = await api.get(`/reports/download/${diagnosisId}`, {
-            responseType: 'blob'
-        });
-
-        // Create download link
-        const url = window.URL.createObjectURL(new Blob([response.data]));
-        const link = document.createElement('a');
-        link.href = url;
-        link.setAttribute('download', filename);
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-    },
-
-    generateSummaryReport: async (userId, startDate, endDate) => {
-        const response = await api.post('/reports/summary', {
-            user_id: userId,
-            start_date: startDate,
-            end_date: endDate
-        }, {
-            responseType: 'blob'
-        });
-        return response.data;
-    },
+  async download(id, filename = `liver_diagnosis_${id}.pdf`) {
+    const response = await api.get(`/reports/${encodeURIComponent(id)}`, { responseType: 'blob' });
+    const blobUrl = window.URL.createObjectURL(response.data);
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => window.URL.revokeObjectURL(blobUrl), 1000);
+  },
 };
 
-// Analytics API
 export const analyticsAPI = {
-    getUserStats: async (userId) => {
-        const response = await api.get('/analytics/user-stats', {
-            params: { user_id: userId }
-        });
-        return response.data;
-    },
-
-    getDiagnosisTrends: async (userId, days = 30) => {
-        const response = await api.get('/analytics/trends', {
-            params: { user_id: userId, days }
-        });
-        return response.data;
-    },
-
-    getRiskDistribution: async () => {
-        const response = await api.get('/analytics/risk-distribution');
-        return response.data;
-    },
+  async userStats() { return (await api.get('/analytics/user-stats')).data; },
+  async trends(days = 30) { return (await api.get('/analytics/trends', { params: { days } })).data; },
+  async riskDistribution() { return (await api.get('/analytics/risk-distribution')).data; },
 };
 
-// Health Tips API
-export const healthTipsAPI = {
-    getTips: async (category = null) => {
-        const response = await api.get('/health-tips', {
-            params: { category }
-        });
-        return response.data;
-    },
-
-    getTipById: async (tipId) => {
-        const response = await api.get(`/health-tips/${tipId}`);
-        return response.data;
-    },
-
-    markTipRead: async (tipId) => {
-        const response = await api.post(`/health-tips/${tipId}/read`);
-        return response.data;
-    },
+export const patientsAPI = {
+  async list() { return (await api.get('/patients')).data; },
+  async add(data) { return (await api.post('/patients/add', data)).data; },
+  async deactivate(id) { return (await api.post(`/patients/${encodeURIComponent(id)}/deactivate`)).data; },
 };
 
-// Utility functions
-export const utils = {
-    handleApiError: (error) => {
-        if (error.response) {
-            // Server responded with error status
-            const { status, data } = error.response;
-            switch (status) {
-                case 400:
-                    return data.detail || 'Bad request. Please check your input.';
-                case 401:
-                    return 'Authentication required. Please log in.';
-                case 403:
-                    return 'Access denied. You do not have permission.';
-                case 404:
-                    return 'Resource not found.';
-                case 422:
-                    return 'Validation error. Please check your input data.';
-                case 500:
-                    return 'Server error. Please try again later.';
-                default:
-                    return data.detail || 'An unexpected error occurred.';
-            }
-        } else if (error.request) {
-            // Network error
-            return 'Network error. Please check your connection.';
-        } else {
-            // Other error
-            return error.message || 'An unexpected error occurred.';
-        }
-    },
-
-    formatApiResponse: (response) => {
-        return {
-            success: true,
-            data: response.data,
-            message: response.data.message || 'Success'
-        };
-    },
-
-    isAuthenticated: () => {
-        return !!localStorage.getItem('auth_token');
-    },
-
-    getAuthToken: () => {
-        return localStorage.getItem('auth_token');
-    }
-};
-
-// Legacy function for backward compatibility
-export const performDiagnosis = async (userId, symptoms, imageFile) => {
-    return diagnosisAPI.performDiagnosis({
-        userId,
-        symptoms,
-        imageFile
-    });
+export const chatAPI = {
+  async start() { return (await api.post('/chat/start', { message: 'start', session_type: 'medical_qa', context: {} })).data; },
+  async send(sessionId, message) { return (await api.post('/chat/message', { session_id: String(sessionId), message })).data; },
+  async history(sessionId) { return (await api.get(`/chat/history/${encodeURIComponent(sessionId)}`)).data; },
 };
 
 export default api;

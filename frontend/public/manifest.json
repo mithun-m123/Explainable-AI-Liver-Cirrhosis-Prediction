@@ -1,0 +1,15 @@
+{
+  "id": ".",
+  "short_name": "LiverAI",
+  "name": "LiverAI Cirrhosis Assessment",
+  "description": "Explainable AI-powered liver cirrhosis assessment workspace",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#0e766e",
+  "background_color": "#f4f8f7",
+  "icons": [
+    { "src": "liver-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
